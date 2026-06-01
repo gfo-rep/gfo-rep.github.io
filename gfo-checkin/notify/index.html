@@ -383,8 +383,8 @@
     OneSignalDeferred.push(async function(OneSignal) {
       await OneSignal.init({
         appId,
-        serviceWorkerPath:  '../OneSignalSDKWorker.js',
-        serviceWorkerParam: { scope: '../' },
+        serviceWorkerPath:  '/gfo-checkin/OneSignalSDKWorker.js',
+        serviceWorkerParam: { scope: '/gfo-checkin/' },
         notifyButton:       { enable: false },
         allowLocalhostAsSecureOrigin: true,
       });
