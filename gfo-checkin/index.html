@@ -461,7 +461,7 @@
   // ─── CONFIG ───────────────────────────────────────────────────
   const WEB3FORMS_KEY       = '3b0f3a77-7761-4387-a644-7ec25cbd337d';    // ← web3forms.com
   const ONESIGNAL_APP_ID    = 'a7252ecb-c489-4161-a0f0-377643091687'; // ← onesignal.com dashboard
-  const ONESIGNAL_REST_KEY  = 'os_v2_app_u4ss5s6erfawdihqg53egciwq4x6z32bb2hu54fkk66d6447imx37d2ejpvxacbxogrmowds6oebil5u2qsm7hrn222zd77h6ffek2a'; // ← onesignal.com dashboard
+  const ONESIGNAL_REST_KEY  = 'os_v2_app_u4ss5s6erfawdihqg53egciwq5lpa6dtaofuahvoeixvhpkx5bnlj6itaixpsmspdtzavhg44j6y4av6wrw4mqp4r4g5ocmx2t64esy'; // ← onesignal.com dashboard
   // ─────────────────────────────────────────────────────────────
 
   // Register service worker
@@ -618,14 +618,17 @@
 
   // ── ONESIGNAL PUSH ────────────────────────────────────────────
   async function notifyMP(firstName, lastName) {
-    if (!ONESIGNAL_APP_ID || ONESIGNAL_APP_ID === 'YOUR_ONESIGNAL_APP_ID') return;
-    try {
-      await fetch('https://api.onesignal.com/notifications', {
-        method: 'POST',
-        headers: {
-          'Content-Type':  'application/json',
-          'Authorization': `Key ${ONESIGNAL_REST_KEY}`
-        },
+  if (!ONESIGNAL_APP_ID || ONESIGNAL_APP_ID === 'a7252ecb-c489-4161-a0f0-377643091687') return;
+  try {
+    await fetch('https://gfo-mp-notify.YOUR-SUBDOMAIN.workers.dev', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ firstName, lastName, appId: ONESIGNAL_APP_ID })
+    });
+  } catch (err) {
+    console.warn('Push notification failed:', err);
+  }
+}
         body: JSON.stringify({
           app_id:             ONESIGNAL_APP_ID,
           included_segments:  ['All'],
