@@ -1,0 +1,560 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>GFO MP Alerts</title>
+
+<!-- PWA -->
+<link rel="manifest" href="manifest.json">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="MP Alerts">
+<meta name="theme-color" content="#0a0a0a">
+
+<!-- OneSignal SDK -->
+<script src="https://cdn.onesignal.com/sdks/web/v16/OneSignalSDK.page.js" defer></script>
+
+<link href="https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=DM+Mono:wght@300;400;500&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg:        #0a0a0a;
+    --surface:   #141414;
+    --border:    #2a2a2a;
+    --dim:       #444;
+    --text:      #e8e4dc;
+    --muted:     #666;
+    --gold:      #d4a017;
+    --gold-dim:  #7a5c0a;
+    --gold-bg:   rgba(212,160,23,0.08);
+    --red:       #c8401a;
+    --green:     #2ecc71;
+    --green-dim: #1a4a2e;
+  }
+
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { height: 100%; background: var(--bg); color: var(--text); font-family: 'DM Mono', monospace; overflow: hidden; }
+
+  /* ── SETUP SCREEN ───────────────────────────────────────── */
+  #setupScreen {
+    position: fixed; inset: 0; z-index: 100;
+    background: var(--bg);
+    display: flex; flex-direction: column;
+    align-items: center; justify-content: center;
+    padding: 32px 24px;
+  }
+  #setupScreen h2 {
+    font-family: 'DM Serif Display', serif;
+    font-size: 1.8rem; margin-bottom: 8px;
+  }
+  #setupScreen h2 em { color: var(--gold); font-style: italic; }
+  #setupScreen p {
+    font-size: 0.75rem; color: var(--muted); text-align: center;
+    margin-bottom: 32px; line-height: 1.7; max-width: 300px;
+    letter-spacing: 0.03em;
+  }
+  .setup-field {
+    width: 100%; max-width: 320px;
+    display: flex; flex-direction: column; gap: 8px; margin-bottom: 16px;
+  }
+  .setup-field label {
+    font-size: 0.65rem; letter-spacing: 0.12em;
+    text-transform: uppercase; color: var(--muted);
+  }
+  .setup-field input {
+    font-family: 'DM Mono', monospace; font-size: 0.9rem;
+    padding: 12px 14px;
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 3px; color: var(--text); outline: none; width: 100%;
+    transition: border-color 0.15s;
+  }
+  .setup-field input:focus { border-color: var(--gold); }
+  .setup-field input::placeholder { color: var(--dim); }
+
+  .btn-primary {
+    width: 100%; max-width: 320px; margin-top: 8px;
+    padding: 14px; background: var(--gold); color: var(--bg);
+    border: none; border-radius: 3px;
+    font-family: 'DM Mono', monospace; font-size: 0.8rem;
+    letter-spacing: 0.15em; text-transform: uppercase;
+    cursor: pointer; font-weight: 500; transition: opacity 0.15s;
+  }
+  .btn-primary:hover { opacity: 0.9; }
+  .btn-primary:disabled { opacity: 0.4; cursor: not-allowed; }
+
+  /* ── ALERT OVERLAY ──────────────────────────────────────── */
+  #alertOverlay {
+    position: fixed; inset: 0; z-index: 200;
+    display: flex; flex-direction: column;
+    align-items: center; justify-content: center;
+    background: var(--bg);
+    opacity: 0; pointer-events: none;
+    transition: opacity 0.2s;
+  }
+  #alertOverlay.active {
+    opacity: 1; pointer-events: all;
+    animation: flash-bg 0.5s ease-out;
+  }
+  @keyframes flash-bg {
+    0%   { background: #2a1f00; }
+    100% { background: var(--bg); }
+  }
+  .alert-ring {
+    width: 160px; height: 160px; border-radius: 50%;
+    border: 2px solid var(--gold);
+    display: flex; align-items: center; justify-content: center;
+    margin-bottom: 28px;
+  }
+  #alertOverlay.active .alert-ring { animation: ring-pulse 1.2s ease-out 3; }
+  @keyframes ring-pulse {
+    0%   { box-shadow: 0 0 0 0 rgba(212,160,23,0.7); }
+    70%  { box-shadow: 0 0 0 30px rgba(212,160,23,0); }
+    100% { box-shadow: 0 0 0 0 rgba(212,160,23,0); }
+  }
+  .alert-icon { font-size: 4rem; }
+  .alert-eyebrow {
+    font-size: 0.62rem; letter-spacing: 0.3em;
+    text-transform: uppercase; color: var(--gold); margin-bottom: 10px;
+  }
+  .alert-name {
+    font-family: 'DM Serif Display', serif;
+    font-size: clamp(1.8rem, 7vw, 2.8rem);
+    text-align: center; line-height: 1.1;
+    max-width: 320px; margin-bottom: 6px;
+  }
+  .alert-time {
+    font-size: 0.72rem; color: var(--muted);
+    letter-spacing: 0.08em; margin-bottom: 44px;
+  }
+  .btn-dismiss {
+    padding: 12px 40px;
+    border: 1px solid var(--gold); border-radius: 2px;
+    background: transparent; color: var(--gold);
+    font-family: 'DM Mono', monospace; font-size: 0.75rem;
+    letter-spacing: 0.15em; text-transform: uppercase;
+    cursor: pointer; transition: all 0.15s;
+  }
+  .btn-dismiss:hover { background: var(--gold); color: var(--bg); }
+
+  /* ── MAIN SCREEN ────────────────────────────────────────── */
+  #mainScreen {
+    height: 100%; display: flex; flex-direction: column;
+    padding: env(safe-area-inset-top, 0) 0 env(safe-area-inset-bottom, 0);
+  }
+
+  .top-bar {
+    display: flex; align-items: center;
+    justify-content: space-between;
+    padding: 16px 20px 12px;
+    border-bottom: 1px solid var(--border);
+    flex-shrink: 0;
+  }
+  .app-title {
+    font-family: 'DM Serif Display', serif;
+    font-size: 1.15rem; letter-spacing: -0.01em;
+  }
+  .app-title em { color: var(--gold); font-style: italic; }
+  .top-right { display: flex; align-items: center; gap: 10px; }
+
+  /* Status pill */
+  .status-pill {
+    display: flex; align-items: center; gap: 6px;
+    padding: 5px 11px; border-radius: 20px;
+    border: 1px solid var(--border);
+    font-size: 0.63rem; letter-spacing: 0.08em;
+    text-transform: uppercase; transition: all 0.3s;
+  }
+  .status-pill.subscribed { border-color: var(--green); color: var(--green); }
+  .status-pill.pending    { border-color: var(--gold);  color: var(--gold);  }
+  .status-pill.blocked    { border-color: var(--red);   color: var(--red);   }
+  .status-dot {
+    width: 7px; height: 7px; border-radius: 50%;
+    background: currentColor;
+  }
+  .status-pill.subscribed .status-dot { animation: breathe 2.4s ease-in-out infinite; }
+  @keyframes breathe {
+    0%, 100% { opacity: 1; } 50% { opacity: 0.25; }
+  }
+
+  /* Sound button */
+  .sound-btn {
+    background: none; border: 1px solid var(--border); border-radius: 20px;
+    padding: 5px 10px; color: var(--muted);
+    font-family: 'DM Mono', monospace; font-size: 0.63rem;
+    letter-spacing: 0.08em; cursor: pointer; transition: all 0.15s;
+  }
+  .sound-btn.on { border-color: var(--gold); color: var(--gold); }
+
+  /* Counters */
+  .counters {
+    display: flex; border-bottom: 1px solid var(--border); flex-shrink: 0;
+  }
+  .counter {
+    flex: 1; padding: 14px 16px;
+    border-right: 1px solid var(--border);
+    display: flex; flex-direction: column; gap: 3px;
+  }
+  .counter:last-child { border-right: none; }
+  .counter-num {
+    font-family: 'DM Serif Display', serif;
+    font-size: 1.9rem; line-height: 1;
+  }
+  .counter-num.gold { color: var(--gold); }
+  .counter-label {
+    font-size: 0.58rem; color: var(--muted);
+    text-transform: uppercase; letter-spacing: 0.1em;
+  }
+
+  /* Subscribe prompt */
+  #subscribePrompt {
+    margin: 16px 20px;
+    background: var(--gold-bg);
+    border: 1px solid var(--gold-dim);
+    border-radius: 3px;
+    padding: 14px 16px;
+    display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  }
+  #subscribePrompt p {
+    font-size: 0.72rem; color: var(--gold);
+    letter-spacing: 0.04em; line-height: 1.5;
+  }
+  .btn-subscribe {
+    flex-shrink: 0; padding: 8px 16px;
+    background: var(--gold); color: var(--bg);
+    border: none; border-radius: 2px;
+    font-family: 'DM Mono', monospace; font-size: 0.7rem;
+    letter-spacing: 0.1em; text-transform: uppercase;
+    cursor: pointer; white-space: nowrap;
+  }
+
+  /* Feed */
+  .feed-label {
+    padding: 10px 20px 8px;
+    font-size: 0.6rem; letter-spacing: 0.14em;
+    text-transform: uppercase; color: var(--muted);
+    border-bottom: 1px solid var(--border); flex-shrink: 0;
+  }
+  .feed { flex: 1; overflow-y: auto; -webkit-overflow-scrolling: touch; }
+  .feed:empty::after {
+    content: 'Waiting for MP check-ins…';
+    display: block; text-align: center;
+    padding: 48px 24px;
+    font-size: 0.78rem; color: var(--muted); letter-spacing: 0.06em;
+  }
+
+  .feed-item {
+    display: flex; align-items: center; gap: 14px;
+    padding: 14px 20px;
+    border-bottom: 1px solid var(--border);
+    background: var(--gold-bg);
+    animation: slide-in 0.3s ease;
+  }
+  @keyframes slide-in {
+    from { opacity: 0; transform: translateX(-10px); }
+    to   { opacity: 1; transform: translateX(0); }
+  }
+  .feed-badge {
+    width: 36px; height: 36px; border-radius: 50%;
+    background: rgba(212,160,23,0.15);
+    border: 1px solid var(--gold-dim);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 1rem; flex-shrink: 0;
+  }
+  .feed-info { flex: 1; min-width: 0; }
+  .feed-name {
+    font-size: 0.9rem; font-weight: 500;
+    color: var(--gold);
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  .feed-sub {
+    font-size: 0.63rem; color: var(--muted);
+    margin-top: 2px;
+  }
+  .feed-time {
+    font-size: 0.63rem; color: var(--muted);
+    flex-shrink: 0; letter-spacing: 0.04em;
+  }
+
+  .feed::-webkit-scrollbar { width: 3px; }
+  .feed::-webkit-scrollbar-track { background: transparent; }
+  .feed::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+</style>
+</head>
+<body>
+
+<!-- Setup -->
+<div id="setupScreen">
+  <h2>MP <em>Alerts</em></h2>
+  <p>Enter your OneSignal App ID to receive locked-screen push notifications when an MP checks in.</p>
+  <div class="setup-field">
+    <label>OneSignal App ID</label>
+    <input type="text" id="appIdInput" placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
+           autocomplete="off" autocorrect="off" spellcheck="false">
+  </div>
+  <button class="btn-primary" id="startBtn">Connect →</button>
+</div>
+
+<!-- Main screen -->
+<div id="mainScreen" style="display:none">
+
+  <div class="top-bar">
+    <div class="app-title">GFO <em>Live</em></div>
+    <div class="top-right">
+      <button class="sound-btn on" id="soundBtn">🔔</button>
+      <div class="status-pill pending" id="statusPill">
+        <div class="status-dot"></div>
+        <span id="statusLabel">Connecting</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="counters">
+    <div class="counter">
+      <div class="counter-num gold" id="mpCount">0</div>
+      <div class="counter-label">MPs arrived</div>
+    </div>
+    <div class="counter">
+      <div class="counter-num" id="lastTime">—</div>
+      <div class="counter-label">Last arrival</div>
+    </div>
+    <div class="counter">
+      <div class="counter-num" id="todayCount">0</div>
+      <div class="counter-label">Today total</div>
+    </div>
+  </div>
+
+  <div id="subscribePrompt" style="display:none">
+    <p>Enable push notifications to receive alerts when the screen is off.</p>
+    <button class="btn-subscribe" id="subscribeBtn">Enable →</button>
+  </div>
+
+  <div class="feed-label">MP Arrivals</div>
+  <div class="feed" id="feed"></div>
+</div>
+
+<!-- Alert overlay -->
+<div id="alertOverlay">
+  <div class="alert-ring"><span class="alert-icon">🏛️</span></div>
+  <div class="alert-eyebrow">MP has arrived</div>
+  <div class="alert-name" id="alertName">—</div>
+  <div class="alert-time" id="alertTime">—</div>
+  <button class="btn-dismiss" id="dismissBtn">Dismiss</button>
+</div>
+
+<script>
+  // ─── CONFIG ──────────────────────────────────────────────
+  // App ID is entered by the user on first open and saved to localStorage
+  // ─────────────────────────────────────────────────────────
+
+  if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.register('./sw.js').catch(() => {});
+  }
+
+  // ── State ─────────────────────────────────────────────────
+  let mpCount   = 0;
+  let todayCount = 0;
+  let soundOn   = true;
+  const AudioCtx = window.AudioContext || window.webkitAudioContext;
+  const STORAGE_KEY = 'gfo-feed-log';
+  const APPID_KEY   = 'gfo-onesignal-appid';
+
+  // ── Setup screen ──────────────────────────────────────────
+  const appIdInput = document.getElementById('appIdInput');
+  const startBtn   = document.getElementById('startBtn');
+  const savedId    = localStorage.getItem(APPID_KEY);
+  if (savedId) appIdInput.value = savedId;
+
+  appIdInput.addEventListener('keydown', e => { if (e.key === 'Enter') startBtn.click(); });
+
+  startBtn.addEventListener('click', () => {
+    const id = appIdInput.value.trim();
+    if (!id) { appIdInput.focus(); return; }
+    localStorage.setItem(APPID_KEY, id);
+    document.getElementById('setupScreen').style.display = 'none';
+    document.getElementById('mainScreen').style.display  = 'flex';
+    loadFeedFromStorage();
+    initOneSignal(id);
+    keepAwake();
+  });
+
+  // ── OneSignal init ────────────────────────────────────────
+  function initOneSignal(appId) {
+    window.OneSignalDeferred = window.OneSignalDeferred || [];
+    OneSignalDeferred.push(async function(OneSignal) {
+      await OneSignal.init({
+        appId,
+        serviceWorkerPath:  '../OneSignalSDKWorker.js',
+        serviceWorkerParam: { scope: '../' },
+        notifyButton:       { enable: false },
+        allowLocalhostAsSecureOrigin: true,
+      });
+
+      // Check current permission state
+      await refreshStatus(OneSignal);
+
+      // Foreground push received → show in-app alert
+      OneSignal.Notifications.addEventListener('foregroundWillDisplay', event => {
+        event.notification.display(); // also show OS banner
+        const n = event.notification;
+        const name = (n.body || '').replace(' has arrived', '').trim();
+        const time = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+        triggerAlert(name, time);
+        addToFeed(name, time);
+        if (soundOn) playChime();
+      });
+
+      // User tapped push notification to open app
+      OneSignal.Notifications.addEventListener('click', event => {
+        const n = event.notification;
+        const name = (n.body || '').replace(' has arrived', '').trim();
+        const time = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+        // Only add to feed if not already there (avoid duplicate)
+        addToFeed(name, time, true);
+      });
+
+      // Permission change
+      OneSignal.Notifications.addEventListener('permissionChange', () => refreshStatus(OneSignal));
+
+      // Subscribe prompt handler
+      document.getElementById('subscribeBtn').addEventListener('click', async () => {
+        await OneSignal.Notifications.requestPermission();
+        await refreshStatus(OneSignal);
+      });
+    });
+  }
+
+  async function refreshStatus(OneSignal) {
+    const pill  = document.getElementById('statusPill');
+    const label = document.getElementById('statusLabel');
+    const prompt = document.getElementById('subscribePrompt');
+
+    const permission  = OneSignal.Notifications.permission; // true/false
+    const optedIn     = await OneSignal.User.PushSubscription.optedIn;
+
+    if (permission && optedIn) {
+      pill.className = 'status-pill subscribed';
+      label.textContent = 'Live';
+      prompt.style.display = 'none';
+    } else if (Notification.permission === 'denied') {
+      pill.className = 'status-pill blocked';
+      label.textContent = 'Blocked';
+      prompt.style.display = 'none';
+    } else {
+      pill.className = 'status-pill pending';
+      label.textContent = 'Not subscribed';
+      prompt.style.display = 'flex';
+    }
+  }
+
+  // ── Alert overlay ─────────────────────────────────────────
+  function triggerAlert(name, time) {
+    document.getElementById('alertName').textContent = name || 'Unknown MP';
+    document.getElementById('alertTime').textContent = `Arrived at ${time}`;
+    const overlay = document.getElementById('alertOverlay');
+    overlay.classList.remove('active');
+    void overlay.offsetWidth; // force reflow to restart animation
+    overlay.classList.add('active');
+    setTimeout(() => overlay.classList.remove('active'), 20000);
+  }
+
+  document.getElementById('dismissBtn').addEventListener('click', () => {
+    document.getElementById('alertOverlay').classList.remove('active');
+  });
+
+  // ── Feed ──────────────────────────────────────────────────
+  let feedLog = [];
+
+  function loadFeedFromStorage() {
+    try {
+      const today = new Date().toDateString();
+      const raw   = JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]');
+      // Only keep today's entries
+      feedLog = raw.filter(e => e.date === today);
+      mpCount    = feedLog.length;
+      todayCount = feedLog.length;
+      document.getElementById('mpCount').textContent    = mpCount;
+      document.getElementById('todayCount').textContent = todayCount;
+      if (feedLog.length) {
+        document.getElementById('lastTime').textContent = feedLog[feedLog.length - 1].time;
+        feedLog.slice().reverse().forEach(e => renderFeedItem(e.name, e.time, false));
+      }
+    } catch (_) {}
+  }
+
+  function addToFeed(name, time, silent = false) {
+    const today = new Date().toDateString();
+    // Deduplicate: skip if same name+time already in log
+    if (feedLog.some(e => e.name === name && e.time === time)) return;
+
+    const entry = { name, time, date: today };
+    feedLog.push(entry);
+
+    mpCount++;    todayCount++;
+    document.getElementById('mpCount').textContent    = mpCount;
+    document.getElementById('todayCount').textContent = todayCount;
+    document.getElementById('lastTime').textContent   = time;
+
+    renderFeedItem(name, time, true);
+
+    // Persist
+    try { localStorage.setItem(STORAGE_KEY, JSON.stringify(feedLog.slice(-50))); } catch (_) {}
+  }
+
+  function renderFeedItem(name, time, animate) {
+    const feed = document.getElementById('feed');
+    const item = document.createElement('div');
+    item.className = 'feed-item';
+    if (!animate) item.style.animation = 'none';
+    item.innerHTML = `
+      <div class="feed-badge">🏛️</div>
+      <div class="feed-info">
+        <div class="feed-name">${escHtml(name)}</div>
+        <div class="feed-sub">MP — push notification sent</div>
+      </div>
+      <div class="feed-time">${time}</div>`;
+    feed.insertBefore(item, feed.firstChild);
+  }
+
+  function escHtml(s) {
+    return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  }
+
+  // ── Sound ─────────────────────────────────────────────────
+  const soundBtn = document.getElementById('soundBtn');
+  soundBtn.addEventListener('click', () => {
+    soundOn = !soundOn;
+    soundBtn.textContent = soundOn ? '🔔' : '🔕';
+    soundBtn.classList.toggle('on', soundOn);
+  });
+
+  function playChime() {
+    try {
+      const ctx  = new AudioCtx();
+      const gain = ctx.createGain();
+      gain.connect(ctx.destination);
+      [[293.66, 0, 0.2], [369.99, 0.24, 0.2], [440, 0.48, 0.32]].forEach(([f, t, d]) => {
+        const o = ctx.createOscillator();
+        o.type = 'sine'; o.frequency.value = f;
+        o.connect(gain);
+        gain.gain.setValueAtTime(0, ctx.currentTime + t);
+        gain.gain.linearRampToValueAtTime(0.4, ctx.currentTime + t + 0.04);
+        gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + t + d);
+        o.start(ctx.currentTime + t);
+        o.stop(ctx.currentTime + t + d + 0.05);
+      });
+    } catch (_) {}
+  }
+
+  // ── Keep screen on ────────────────────────────────────────
+  async function keepAwake() {
+    if (!('wakeLock' in navigator)) return;
+    try { await navigator.wakeLock.request('screen'); } catch (_) {}
+    document.addEventListener('visibilitychange', async () => {
+      if (document.visibilityState === 'visible') {
+        try { await navigator.wakeLock.request('screen'); } catch (_) {}
+      }
+    });
+  }
+</script>
+</body>
+</html>
