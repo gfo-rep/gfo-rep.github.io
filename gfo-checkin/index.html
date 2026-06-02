@@ -454,6 +454,10 @@
   // ─────────────────────────────────────────────────────────────
 
   // Register service worker
+  window.addEventListener('beforeunload', e => {
+  e.preventDefault();
+  e.returnValue = '';
+});
   if ('serviceWorker' in navigator) {
     navigator.serviceWorker.register('./sw.js').catch(() => {});
   }
